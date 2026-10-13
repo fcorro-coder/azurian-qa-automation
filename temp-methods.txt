@@ -1,0 +1,37 @@
+﻿
+  async fillValidDocument(folio: number): Promise<void> {
+    const dialog = this.page.getByRole("dialog", {
+      name: "Emitir nuevo documento"
+    });
+
+    await dialog.getByLabel("Tipo de documento tributario")
+      .selectOption({ label: "DTE 33 - Factura Electrónica" });
+
+    await dialog.getByRole("spinbutton", {
+      name: "Número de folio *"
+    }).fill(String(folio));
+
+    await dialog.getByRole("textbox", {
+      name: "RUT receptor *"
+    }).fill("76.086.428-5");
+
+    await dialog.getByRole("spinbutton", {
+      name: "Monto total (CLP) *"
+    }).fill("150000");
+
+    await dialog.getByRole("textbox", {
+      name: "Observaciones"
+    }).fill("Documento creado mediante automatización QA");
+  }
+
+  async saveDocument(): Promise<void> {
+    const dialog = this.page.getByRole("dialog", {
+      name: "Emitir nuevo documento"
+    });
+
+    await dialog.getByRole("button", {
+      name: "Guardar y emitir"
+    }).click();
+
+    await expect(dialog).toBeHidden();
+  }

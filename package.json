@@ -1,0 +1,28 @@
+{
+  "name": "azurian-qa-automation",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "cucumber-js --config cucumber.cjs",
+    "test:api": "cucumber-js --config cucumber.cjs --tags @api",
+    "test:ui": "cucumber-js --config cucumber.cjs --tags @ui",
+    "typecheck": "tsc --noEmit",
+    "report:generate": "allure generate allure-results --clean -o allure-report",
+    "report:open": "allure open allure-report",
+    "test:check": "npm run typecheck && npm test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@cucumber/cucumber": "^12.9.0",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^26.6.4",
+    "allure-commandline": "^2.46.1",
+    "allure-cucumberjs": "^3.13.0",
+    "dotenv": "^18.0.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

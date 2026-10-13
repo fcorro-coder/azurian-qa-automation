@@ -1,0 +1,9 @@
+﻿node_modules/
+dist/
+.env
+reports/
+allure-results/
+allure-results-respaldo/
+allure-report/
+test-results/
+*.log
