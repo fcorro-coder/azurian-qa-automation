@@ -1,44 +1,44 @@
 import { Given, When, Then } from "@cucumber/cucumber";
-import { expect } from "@playwright/test";
 import assert from "node:assert/strict";
 import { randomInt } from "node:crypto";
 import { DocumentFormPage } from "../../pages/document-form.page";
 import { DocumentEditPage } from "../../pages/document-edit.page";
+import { DocumentsPage } from "../../pages/documents.page";
 import type { CustomWorld } from "../../fixtures/custom-world";
+
+const RUT_RECEPTOR = "76.086.428-5";
+const TIPO_DTE = "DTE 33";
+const ESTADO_PENDIENTE = "Pendiente";
+const MONTO_INICIAL = 150000;
 
 Given("creo un documento pendiente para actualizar", async function (this: CustomWorld) {
   assert.ok(this.page, "No existe una página de navegador");
 
   const folio = randomInt(1000000, 9999999);
   const form = new DocumentFormPage(this.page);
+  const documents = new DocumentsPage(this.page);
 
-  await form.openCreateForm();
-  await form.fillValidDocument(folio);
-  await form.saveDocument();
+  await documents.runAndWaitForListRefresh(async () => {
+    await form.openCreateForm();
+    await form.fillValidDocument(folio);
+    await form.saveDocument();
+  });
 
   this.documentData = {
     folio,
-    monto: 150000,
-    rutReceptor: "76.086.428-5"
+    monto: MONTO_INICIAL,
+    rutReceptor: RUT_RECEPTOR,
+    tipoDte: TIPO_DTE
   };
 
-  const searchInput = this.page.getByRole("textbox", {
-    name: /Buscar por RUT Receptor/i
+  await documents.searchByRut(RUT_RECEPTOR);
+  await documents.expectResultsCount(1);
+  await documents.expectDocumentRow(folio, {
+    rut: RUT_RECEPTOR,
+    tipoDte: TIPO_DTE,
+    monto: MONTO_INICIAL,
+    estado: ESTADO_PENDIENTE
   });
-
-  await searchInput.fill("76.086.428-5");
-
-  await this.page.getByRole("button", {
-    name: "Buscar",
-    exact: true
-  }).click();
-
-  const row = this.page.getByRole("row").filter({
-    hasText: `#${folio}`
-  });
-
-  await expect(row).toBeVisible();
-  await expect(row).toContainText("Pendiente");
 });
 
 When("modifico su monto a {int} desde la interfaz", async function (
@@ -52,9 +52,11 @@ When("modifico su monto a {int} desde la interfaz", async function (
   assert.ok(typeof folio === "number", "El folio debe ser numérico");
 
   const editPage = new DocumentEditPage(this.page);
+  const documents = new DocumentsPage(this.page);
 
   await editPage.openEditForm(folio);
-  await editPage.updateAmount(monto);
+  // Espera el PUT y la recarga del listado que confirma que el cambio quedó persistido.
+  await documents.runAndWaitForListRefresh(() => editPage.updateAmount(monto));
 
   this.documentData.monto = monto;
 });
@@ -68,23 +70,43 @@ Then("debo visualizar el monto actualizado en el listado", async function (
   const folio = this.documentData.folio;
   const monto = this.documentData.monto;
 
-  assert.ok(typeof folio === "number");
-  assert.ok(typeof monto === "number");
+  assert.ok(typeof folio === "number", "El folio debe ser numérico");
+  assert.ok(typeof monto === "number", "El monto debe ser numérico");
 
-  const row = this.page.getByRole("row").filter({
-    hasText: `#${folio}`
+  const rut = String(this.documentData.rutReceptor);
+  const documents = new DocumentsPage(this.page);
+
+  await documents.expectSuccessNotice(`Documento folio ${folio} actualizado correctamente.`);
+  await documents.expectDocumentRow(folio, {
+    rut,
+    tipoDte: TIPO_DTE,
+    monto,
+    estado: ESTADO_PENDIENTE
   });
 
-  await expect(row).toBeVisible();
+  // Persistencia: recarga completa del portal y verificación por folio y RUT exactos.
+  await documents.reloadWithListLoaded();
+  await documents.searchByRut(rut);
+  await documents.expectResultsCount(1);
 
-  await expect(row).toContainText(monto.toLocaleString("es-CL"));
-  await expect(row).toContainText(String(this.documentData.rutReceptor));
+  const row = await documents.expectDocumentRow(folio, {
+    rut,
+    tipoDte: TIPO_DTE,
+    monto,
+    estado: ESTADO_PENDIENTE
+  });
 
-  await this.page.reload();
-  const searchInput = this.page.getByRole("textbox", { name: /Buscar por RUT Receptor/i });
-  await searchInput.fill("76.086.428-5");
-  await this.page.getByRole("button", { name: "Buscar", exact: true }).click();
-  await expect(row).toBeVisible();
-  await expect(row).toContainText(monto.toLocaleString("es-CL"));
-  await expect(row).toContainText(String(this.documentData.rutReceptor));
+  await this.attach(
+    JSON.stringify(
+      {
+        avisoEsperado: `Documento folio ${folio} actualizado correctamente.`,
+        filtroRut: rut,
+        montoEsperado: monto,
+        filaObservada: await row.innerText()
+      },
+      null,
+      2
+    ),
+    "application/json"
+  );
 });

@@ -4,6 +4,7 @@ dist/
 reports/
 allure-results/
 allure-results-respaldo/
+allure-results-acumulado/
 allure-report/
 test-results/
 *.log

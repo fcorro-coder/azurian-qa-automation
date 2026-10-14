@@ -1,5 +1,6 @@
 ﻿import { expect, type Page } from "@playwright/test";
 import { config } from "../config/env";
+import { DocumentsPage } from "./documents.page";
 
 export class LoginPage {
   constructor(private readonly page: Page) {}
@@ -30,5 +31,9 @@ export class LoginPage {
         name: "Documentos Tributarios Electrónicos"
       })
     ).toBeVisible();
+
+    // El portal solo queda listo cuando la primera consulta del listado terminó:
+    // así ningún escenario parte con una petición de listado todavía en curso.
+    await new DocumentsPage(this.page).waitForListIdle();
   }
 }
