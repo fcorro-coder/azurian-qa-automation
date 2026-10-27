@@ -1,4 +1,4 @@
-﻿import type { APIRequestContext } from "@playwright/test";
+﻿import type { APIRequestContext, APIResponse } from "@playwright/test";
 import assert from "node:assert/strict";
 import { config } from "../../config/env";
 
@@ -6,10 +6,16 @@ interface LoginResponse {
   token: string;
 }
 
+/** Resultado del login: token y respuesta HTTP para adjuntar evidencia. */
+export interface LoginResult {
+  token: string;
+  response: APIResponse;
+}
+
 export class AuthClient {
   constructor(private readonly api: APIRequestContext) {}
 
-  async login(): Promise<string> {
+  async login(): Promise<LoginResult> {
     const response = await this.api.post(
       `${config.apiBaseUrl}/auth/login`,
       {
@@ -39,6 +45,6 @@ export class AuthClient {
       "La autenticación no devolvió un token JWT válido"
     );
 
-    return (body as LoginResponse).token;
+    return { token: (body as LoginResponse).token, response };
   }
 }

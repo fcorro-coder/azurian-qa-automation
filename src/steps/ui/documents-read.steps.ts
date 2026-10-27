@@ -1,16 +1,11 @@
 import { Given, When, Then } from "@cucumber/cucumber";
 import assert from "node:assert/strict";
-import { randomInt } from "node:crypto";
 import { expect } from "@playwright/test";
 import { LoginPage } from "../../pages/login.page";
 import { DocumentsPage } from "../../pages/documents.page";
 import { DocumentFormPage } from "../../pages/document-form.page";
+import { ESTADO_PRUEBA_UI, createDocumentFixture, randomFolio } from "../../fixtures/test-data";
 import type { CustomWorld } from "../../fixtures/custom-world";
-
-const RUT_RECEPTOR = "76.086.428-5";
-const TIPO_DTE = "DTE 33";
-const ESTADO_PENDIENTE = "Pendiente";
-const MONTO = 150000;
 
 Given("que ingreso al portal Azurian con credenciales válidas", async function (this: CustomWorld) {
   assert.ok(this.page, "No existe una página de navegador");
@@ -19,29 +14,27 @@ Given("que ingreso al portal Azurian con credenciales válidas", async function 
 
 Given("que existen dos documentos propios con el mismo RUT para consultar", async function (this: CustomWorld) {
   assert.ok(this.page, "No existe una página de navegador");
+  assert.ok(this.rutReceptor, "No se generó el RUT del escenario");
 
-  const folio = randomInt(1000000, 9999999);
-  const otroFolio = randomInt(1000000, 9999999);
-  assert.notEqual(folio, otroFolio);
+  const fixture = createDocumentFixture(randomFolio(), this.rutReceptor);
+  const secondary = createDocumentFixture(randomFolio(), this.rutReceptor);
+  assert.notEqual(fixture.folio, secondary.folio);
+  // Los dos documentos de la consulta comparten el RUT del escenario.
+  assert.equal(fixture.rutReceptor, secondary.rutReceptor);
 
   const form = new DocumentFormPage(this.page);
   const documents = new DocumentsPage(this.page);
 
-  for (const numero of [folio, otroFolio]) {
+  for (const item of [fixture, secondary]) {
     await documents.runAndWaitForListRefresh(async () => {
       await form.openCreateForm();
-      await form.fillValidDocument(numero);
+      await form.fillValidDocument(item);
       await form.saveDocument();
     });
   }
 
-  this.documentData = {
-    folio,
-    otroFolio,
-    rutReceptor: RUT_RECEPTOR,
-    monto: MONTO,
-    tipoDte: TIPO_DTE
-  };
+  this.documentFixture = fixture;
+  this.secondaryDocumentFixture = secondary;
 });
 
 When("consulto el módulo de documentos electrónicos", async function (this: CustomWorld) {
@@ -55,43 +48,44 @@ Then("debo visualizar el listado de documentos", async function (this: CustomWor
 });
 
 When("filtro por el RUT del documento propio", async function (this: CustomWorld) {
-  assert.ok(this.page && this.documentData);
-  await new DocumentsPage(this.page).searchByRut(String(this.documentData.rutReceptor));
+  const fixture = this.documentFixture;
+  assert.ok(this.page && fixture);
+  await new DocumentsPage(this.page).searchByRut(fixture.rutReceptor);
 });
 
 Then("identifico el folio exacto entre varios documentos del mismo RUT", async function (this: CustomWorld) {
-  assert.ok(this.page && this.documentData);
+  const fixture = this.documentFixture;
+  const secondary = this.secondaryDocumentFixture;
+  assert.ok(this.page && fixture && secondary);
 
-  const folio = Number(this.documentData.folio);
-  const otroFolio = Number(this.documentData.otroFolio);
-  const rut = String(this.documentData.rutReceptor);
   const documents = new DocumentsPage(this.page);
 
   // El filtro devolvió exactamente los dos documentos propios del escenario.
   await documents.expectResultsCount(2);
 
-  await documents.expectDocumentRow(folio, {
-    rut,
-    tipoDte: TIPO_DTE,
-    monto: MONTO,
-    estado: ESTADO_PENDIENTE
+  const filaObjetivo = await documents.expectDocumentRow(fixture.folio, {
+    rut: fixture.rutReceptor,
+    tipoDte: fixture.tipoDte,
+    monto: fixture.monto,
+    estado: ESTADO_PRUEBA_UI
   });
 
-  const otraFila = documents.rowByFolioText(otroFolio);
-  await expect(otraFila, `Debió existir exactamente una fila para el folio #${otroFolio}`).toHaveCount(1);
-  await expect(otraFila).toContainText(rut);
-  await expect(otraFila).toContainText(TIPO_DTE);
-  await expect(otraFila).toContainText(MONTO.toLocaleString("es-CL"));
+  const otraFila = await documents.expectDocumentRow(secondary.folio, {
+    rut: fixture.rutReceptor,
+    tipoDte: secondary.tipoDte,
+    monto: secondary.monto,
+    estado: ESTADO_PRUEBA_UI
+  });
 
   await documents.expectNoErrors();
 
   await this.attach(
     JSON.stringify(
       {
-        filtroRut: rut,
-        foliosEsperados: [folio, otroFolio],
+        filtroRut: fixture.rutReceptor,
+        foliosEsperados: [fixture.folio, secondary.folio],
         totalEsperado: 2,
-        filaObjetivo: await documents.rowByFolioText(folio).innerText(),
+        filaObjetivo: await filaObjetivo.innerText(),
         filaCompuesta: await otraFila.innerText()
       },
       null,
@@ -102,26 +96,27 @@ Then("identifico el folio exacto entre varios documentos del mismo RUT", async f
 });
 
 When("abro el detalle del folio exacto", async function (this: CustomWorld) {
-  assert.ok(this.page && this.documentData);
+  const fixture = this.documentFixture;
+  assert.ok(this.page && fixture);
 
-  const dialog = await new DocumentsPage(this.page).openDetail(Number(this.documentData.folio));
-  await this.attach(`Detalle abierto para folio ${this.documentData.folio}`, "text/plain");
+  const dialog = await new DocumentsPage(this.page).openDetail(fixture.folio);
+  await this.attach(`Detalle abierto para folio ${fixture.folio}`, "text/plain");
   await expect(dialog).toBeVisible();
 });
 
 Then("el detalle debe mostrar el folio, RUT, tipo y monto correctos", async function (this: CustomWorld) {
-  assert.ok(this.page && this.documentData);
+  const fixture = this.documentFixture;
+  assert.ok(this.page && fixture);
 
-  const folio = Number(this.documentData.folio);
-  const rut = String(this.documentData.rutReceptor);
-  const dialog = this.page.getByRole("dialog");
+  const documents = new DocumentsPage(this.page);
+  const dialog = await documents.expectDetailDialog();
 
   const expected = {
-    titulo: `Detalle DTE - Folio #${folio}`,
-    tipo: `Tipo: ${TIPO_DTE}`,
-    rut: `RUT Receptor: ${rut}`,
-    monto: `Monto: $ ${MONTO.toLocaleString("es-CL")} CLP`,
-    estado: ESTADO_PENDIENTE
+    titulo: `Detalle DTE - Folio #${fixture.folio}`,
+    tipo: `Tipo: ${fixture.tipoDte}`,
+    rut: `RUT Receptor: ${fixture.rutReceptor}`,
+    monto: `Monto: $ ${fixture.monto.toLocaleString("es-CL")} CLP`,
+    estado: ESTADO_PRUEBA_UI
   };
 
   await this.attach(JSON.stringify({ expected }, null, 2), "application/json");

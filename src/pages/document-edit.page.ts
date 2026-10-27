@@ -1,6 +1,6 @@
-﻿import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
-const NETWORK_TIMEOUT_MS = 15_000;
+import { UI_NETWORK_TIMEOUT_MS } from "../config/timeouts";
 
 /** Formulario de edición de documentos con localizadores y esperas centralizados. */
 export class DocumentEditPage {
@@ -39,12 +39,36 @@ export class DocumentEditPage {
         (candidate) =>
           candidate.request().method() === "PUT" &&
           new URL(candidate.url()).pathname.startsWith("/api/documents/"),
-        { timeout: NETWORK_TIMEOUT_MS }
+        { timeout: UI_NETWORK_TIMEOUT_MS }
       ),
       dialog.getByRole("button", { name: "Guardar cambios" }).click()
     ]);
 
     expect(response.status(), "La actualización del documento debió responder 200").toBe(200);
     await expect(dialog).toBeHidden();
+  }
+
+  /** Verifica que el tipo de DTE está deshabilitado en edición (no modificable después de la creación). */
+  async expectTipoDteDisabled(): Promise<void> {
+    await expect(
+      this.dialog().getByLabel("Tipo de documento tributario"),
+      "El tipo de DTE debe estar deshabilitado en edición"
+    ).toBeDisabled();
+  }
+
+  /** Verifica que el folio está deshabilitado en edición. */
+  async expectFolioDisabled(): Promise<void> {
+    await expect(
+      this.dialog().getByRole("spinbutton", { name: "Número de folio *" }),
+      "El folio debe estar deshabilitado en edición"
+    ).toBeDisabled();
+  }
+
+  /** Verifica que el monto sigue habilitado para edición. */
+  async expectMontoEnabled(): Promise<void> {
+    await expect(
+      this.dialog().getByRole("spinbutton", { name: "Monto total (CLP) *" }),
+      "El monto debe estar habilitado para editar"
+    ).toBeEnabled();
   }
 }

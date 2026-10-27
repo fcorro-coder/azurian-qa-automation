@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page, type Response } from "@playwright/test";
 
 const LIST_PATH = "/api/documents";
-const NETWORK_TIMEOUT_MS = 15_000;
+import { UI_NETWORK_TIMEOUT_MS } from "../config/timeouts";
 
 interface DocumentRowExpectation {
   rut: string;
@@ -60,7 +60,7 @@ export class DocumentsPage {
   ): Promise<void> {
     const pending = this.page.waitForResponse(
       (candidate) => this.isListResponse(candidate) && matches(new URL(candidate.url())),
-      { timeout: NETWORK_TIMEOUT_MS }
+      { timeout: UI_NETWORK_TIMEOUT_MS }
     );
     // Evita un rechazo no manejado si la acción falla antes de consumir la respuesta.
     pending.catch(() => undefined);
@@ -131,11 +131,14 @@ export class DocumentsPage {
   }
 
   /**
-   * Comprueba que ninguna fila conserva el folio. Debe invocarse siempre después de
-   * `waitForListIdle` o de una búsqueda sincronizada: contra la tabla en carga la
-   * comprobación se cumpliría sin que la consulta haya terminado.
+   * Comprueba que ninguna fila conserva el folio. Sincroniza internamente con la carga
+   * del listado, de modo que es seguro aunque un escenario futuro lo invoque sin haber
+   * esperado antes: contra la tabla en carga la comprobación se cumpliría sin que la
+   * consulta haya terminado.
    */
   async expectDocumentAbsent(folio: number): Promise<void> {
+    await this.waitForListIdle();
+
     await expect(
       this.rowByFolioText(folio),
       `El folio #${folio} no debió permanecer en el listado`
@@ -159,9 +162,15 @@ export class DocumentsPage {
     return row;
   }
 
-  /** Comprueba el estado de tabla vacía tras aplicar un filtro sin resultados. */
+  /**
+   * Comprueba el estado de tabla vacía tras aplicar un filtro sin resultados.
+   * Tras sincronizar con la carga descarta primero cualquier `role="alert"` de la
+   * aplicación: un error de consulta también renderiza "0 documentos encontrados"
+   * con el estado vacío, y debe fallar en lugar de aprobarse como listado vacío.
+   */
   async expectEmptyResults(): Promise<void> {
     await this.waitForListIdle();
+    await this.expectNoErrors();
     await this.expectResultsCount(0);
     await expect(this.emptyState, "Debió mostrarse el estado vacío del listado").toBeVisible();
     await expect(this.folioRows, "La tabla no debió conservar filas con folio").toHaveCount(0);
@@ -188,13 +197,11 @@ export class DocumentsPage {
     await this.expectNoErrors();
   }
 
-  async openDetail(folio: number): Promise<Locator> {
-    const row = this.rowByFolio(folio);
-    await expect(row, `Debió existir la fila del folio #${folio} para abrir el detalle`).toHaveCount(1);
-
-    await row.getByRole("button", { name: /Ver detalle/i }).click();
-
-    const dialog = this.page.getByRole("dialog");
+  /**
+   * El diálogo de detalle está visible y completamente cargado: espera que su
+   * indicador interno desaparezca, garantizando que el detalle ya está renderizado.
+   */
+  private async waitForDetailLoaded(dialog: Locator): Promise<void> {
     await expect(dialog).toBeVisible();
     // El diálogo monta su indicador de carga en el mismo render en que se hace visible,
     // de modo que esperarlo a desaparecer garantiza que el detalle ya está cargado.
@@ -202,6 +209,24 @@ export class DocumentsPage {
       dialog.getByRole("status", { name: "Cargando detalle del documento" }),
       "El detalle debió terminar de cargar"
     ).toBeHidden();
+  }
+
+  async openDetail(folio: number): Promise<Locator> {
+    const row = this.rowByFolio(folio);
+    await expect(row, `Debió existir la fila del folio #${folio} para abrir el detalle`).toHaveCount(1);
+
+    await row.getByRole("button", { name: /Ver detalle/i }).click();
+
+    const dialog = this.page.getByRole("dialog");
+    await this.waitForDetailLoaded(dialog);
+
+    return dialog;
+  }
+
+  /** Diálogo de detalle ya abierto, re-sincronizado con su estado cargado. */
+  async expectDetailDialog(): Promise<Locator> {
+    const dialog = this.page.getByRole("dialog");
+    await this.waitForDetailLoaded(dialog);
 
     return dialog;
   }
@@ -216,5 +241,31 @@ export class DocumentsPage {
       ).toBeVisible();
     }
     await this.waitForListIdle();
+  }
+
+  /** Envía un documento al SII desde el listado y espera la recarga (incluye el aviso de resultado). */
+  async sendToSii(folio: number): Promise<void> {
+    const row = this.rowByFolio(folio);
+    const button = row.getByRole("button", { name: `Enviar al SII folio ${folio}`, exact: true });
+    await expect(button, "El botón de envío debe estar habilitado para documentos pendientes").toBeEnabled();
+    await this.runAndWaitForListRefresh(() => button.click());
+  }
+
+  /** Verifica que la fila del documento muestra el estado esperado en la interfaz. */
+  async expectRowState(folio: number, estadoUI: string): Promise<void> {
+    const row = this.rowByFolio(folio);
+    await expect(row, `La fila debe mostrar el estado ${estadoUI}`).toContainText(estadoUI);
+  }
+
+  /** Verifica que un botón de acción en la fila está deshabilitado con el título explicativo correcto. */
+  async expectRowButtonDisabled(
+    folio: number,
+    buttonAriaLabel: string,
+    expectedTitle: string
+  ): Promise<void> {
+    const row = this.rowByFolio(folio);
+    const button = row.getByRole("button", { name: buttonAriaLabel, exact: true });
+    await expect(button, "El botón debe estar deshabilitado").toBeDisabled();
+    await expect(button, "El título debe explicar el bloqueo").toHaveAttribute("title", expectedTitle);
   }
 }

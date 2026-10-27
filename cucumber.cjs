@@ -1,4 +1,4 @@
-﻿module.exports = {
+module.exports = {
   default: {
     paths: ["features/**/*.feature"],
     requireModule: ["tsx/cjs"],
@@ -12,7 +12,12 @@
       "allure-cucumberjs/reporter"
     ],
     formatOptions: {
-      resultsDir: "allure-results"
+      resultsDir: "allure-results",
+      labels: [
+        { name: "severity", pattern: [/^@severity:/] },
+        { name: "epic", pattern: [/^@epic:/] },
+        { name: "story", pattern: [/^@story:/] }
+      ]
     },
     publish: false
   }

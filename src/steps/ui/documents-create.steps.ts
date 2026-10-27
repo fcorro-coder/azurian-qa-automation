@@ -2,11 +2,8 @@
 import assert from "node:assert/strict";
 import { DocumentFormPage } from "../../pages/document-form.page";
 import { DocumentsPage } from "../../pages/documents.page";
+import { ESTADO_PRUEBA_UI, createDocumentFixture, randomFolio } from "../../fixtures/test-data";
 import type { CustomWorld } from "../../fixtures/custom-world";
-
-const RUT_RECEPTOR = "76.086.428-5";
-const TIPO_DTE = "DTE 33";
-const ESTADO_PENDIENTE = "Pendiente";
 
 When("abro el formulario de nuevo documento", async function (this: CustomWorld) {
   assert.ok(this.page, "No existe una página de navegador");
@@ -22,17 +19,12 @@ Then("debo visualizar los campos obligatorios de creación", async function (thi
 
 When("completo los datos válidos del documento", async function (this: CustomWorld) {
   assert.ok(this.page, "No existe una página de navegador");
+  assert.ok(this.rutReceptor, "No se generó el RUT del escenario");
 
-  const folio = Math.floor(Math.random() * 9000000) + 1000000;
+  const fixture = createDocumentFixture(randomFolio(), this.rutReceptor);
+  this.documentFixture = fixture;
 
-  this.documentData = {
-    folio,
-    rutReceptor: RUT_RECEPTOR,
-    monto: 150000,
-    tipoDte: TIPO_DTE
-  };
-
-  await new DocumentFormPage(this.page).fillValidDocument(folio);
+  await new DocumentFormPage(this.page).fillValidDocument(fixture);
 });
 
 When("guardo el documento desde la interfaz", async function (this: CustomWorld) {
@@ -47,34 +39,31 @@ When("guardo el documento desde la interfaz", async function (this: CustomWorld)
 
 Then("debo encontrar el documento creado en el listado", async function (this: CustomWorld) {
   assert.ok(this.page, "No existe una página de navegador");
-  assert.ok(this.documentData, "No existen datos del documento creado");
 
-  const folio = this.documentData.folio;
-  assert.ok(typeof folio === "number", "El folio debe ser numérico");
+  const fixture = this.documentFixture;
+  assert.ok(fixture, "No existen datos del documento creado");
 
-  const rut = String(this.documentData.rutReceptor);
-  const monto = Number(this.documentData.monto);
   const documents = new DocumentsPage(this.page);
 
-  await documents.expectSuccessNotice(`Documento folio ${folio} emitido correctamente.`);
+  await documents.expectSuccessNotice(`Documento folio ${fixture.folio} emitido correctamente.`);
 
   // Persistencia: recarga completa del portal y verificación por folio y RUT exactos.
   await documents.reloadWithListLoaded();
-  await documents.searchByRut(rut);
+  await documents.searchByRut(fixture.rutReceptor);
   await documents.expectResultsCount(1);
 
-  const row = await documents.expectDocumentRow(folio, {
-    rut,
-    tipoDte: TIPO_DTE,
-    monto,
-    estado: ESTADO_PENDIENTE
+  const row = await documents.expectDocumentRow(fixture.folio, {
+    rut: fixture.rutReceptor,
+    tipoDte: fixture.tipoDte,
+    monto: fixture.monto,
+    estado: ESTADO_PRUEBA_UI
   });
 
   await this.attach(
     JSON.stringify(
       {
-        avisoEsperado: `Documento folio ${folio} emitido correctamente.`,
-        filtroRut: rut,
+        avisoEsperado: `Documento folio ${fixture.folio} emitido correctamente.`,
+        filtroRut: fixture.rutReceptor,
         filaObservada: await row.innerText()
       },
       null,

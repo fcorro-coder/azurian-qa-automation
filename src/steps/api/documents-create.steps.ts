@@ -1,23 +1,36 @@
-import { When, Then } from "@cucumber/cucumber";
+import { When, Then, type DataTable } from "@cucumber/cucumber";
 import assert from "node:assert/strict";
-import { randomInt } from "node:crypto";
 import { DocumentsClient } from "../../api/clients/documents.client";
 import { assertDocument } from "../../validators/document-contract";
+import { EXPECTED_API_SIN_ADJUNTOS, createDocumentInput, randomFolio } from "../../fixtures/test-data";
+import { DTE_TYPE_VALUES, type DteType } from "../../types/documents";
 import type { CustomWorld } from "../../fixtures/custom-world";
 
-When("creo un documento electrónico con datos válidos", async function (this: CustomWorld) {
+/** Toma el tipo DTE de la tabla del escenario; falla si la tabla declara uno desconocido. */
+function parseTipoDte(value: string): DteType {
+  const tipo = DTE_TYPE_VALUES.find((option) => option === value);
+  assert.ok(tipo, `Tipo de DTE no soportado en la tabla del escenario: ${value}`);
+  return tipo;
+}
+
+// Gherkin conserva los dos puntos finales del paso cuando viene acompañado de tabla.
+When("creo un documento electrónico con los siguientes datos:", async function (this: CustomWorld, table: DataTable) {
   assert.ok(this.apiContext, "El cliente HTTP no está inicializado");
   assert.ok(this.authToken, "No existe un JWT");
   assert.ok(this.runId, "No existe un runId");
+  assert.ok(this.rutReceptor, "No se generó el RUT del escenario");
 
+  const rows = table.hashes();
+  assert.equal(rows.length, 1, "La tabla debe declarar exactamente una fila de datos");
+
+  const monto = Number(rows[0].monto);
+  assert.ok(Number.isInteger(monto), "El monto de la tabla debe ser un entero en CLP");
+
+  // Folio y RUT son datos de aislamiento (generados); tipo y monto vienen de Gherkin.
   this.documentData = {
-    tipoDte: "DTE 33",
-    folio: randomInt(100000, 9999999),
-    rutReceptor: "76.086.428-5",
-    monto: 150000,
-    fechaEmision: new Date().toISOString().slice(0, 10),
-    deliveryChannel: "PORTAL",
-    sendCopy: false,
+    ...createDocumentInput(randomFolio(), this.rutReceptor),
+    tipoDte: parseTipoDte(rows[0].tipoDte),
+    monto
   };
 
   const client = new DocumentsClient(
@@ -57,9 +70,9 @@ Then("el documento creado debe conservar sus datos", async function (this: Custo
 
   assert.ok("id" in body, "La respuesta no contiene el identificador");
 
-  const created = body as Record<string, unknown>;
+  assertDocument(body, { ...this.documentData, ...EXPECTED_API_SIN_ADJUNTOS });
+  const created = body;
 
-  assertDocument(body, { ...this.documentData, estado: "PENDIENTE", contactEmail: null, observaciones: null, attachmentName: null });
   assert.equal(created.tipoDte, this.documentData.tipoDte);
   assert.equal(created.folio, this.documentData.folio);
   assert.equal(created.rutReceptor, this.documentData.rutReceptor);
@@ -67,8 +80,10 @@ Then("el documento creado debe conservar sus datos", async function (this: Custo
   assert.equal(created.fechaEmision, this.documentData.fechaEmision);
   assert.equal(created.deliveryChannel, this.documentData.deliveryChannel);
   assert.equal(created.sendCopy, this.documentData.sendCopy);
-  assert.ok(typeof created.id === "string" || typeof created.id === "number", "El ID debe ser texto o número");
-  assert.ok(String(created.id).trim().length > 0, "El ID no puede estar vacío");
+  // Aserción histórica del ID, conservada textualmente sobre una vista no tipada.
+  const idValue: unknown = created.id;
+  assert.ok(typeof idValue === "string" || typeof idValue === "number", "El ID debe ser texto o número");
+  assert.ok(String(idValue).trim().length > 0, "El ID no puede estar vacío");
 
   this.documentId = String(created.id);
 });
@@ -107,10 +122,10 @@ Then("puedo recuperar el documento creado por su identificador", async function 
   assert.ok("id" in document, "El documento no contiene ID");
   assert.ok("folio" in document, "El documento no contiene folio");
 
-  assertDocument(document, { ...this.documentData, id: this.documentId, estado: "PENDIENTE", contactEmail: null, observaciones: null, attachmentName: null });
+  assertDocument(document, { ...this.documentData, id: this.documentId, ...EXPECTED_API_SIN_ADJUNTOS });
   assert.equal(String(document.id), this.documentId);
-  for (const key of ["tipoDte", "folio", "rutReceptor", "monto", "fechaEmision", "deliveryChannel", "sendCopy"]) {
-    assert.equal((document as Record<string, unknown>)[key], this.documentData[key], `El campo ${key} no coincide tras GET`);
+  for (const key of ["tipoDte", "folio", "rutReceptor", "monto", "fechaEmision", "deliveryChannel", "sendCopy"] as const) {
+    assert.equal(document[key], this.documentData[key], `El campo ${key} no coincide tras GET`);
   }
   await this.attachApiEvidence(response, "GET");
 });

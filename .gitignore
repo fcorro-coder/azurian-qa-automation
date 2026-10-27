@@ -1,10 +1,37 @@
-﻿node_modules/
+﻿# ============================
+# Dependencias y compilación
+# ============================
+node_modules/
 dist/
-.env
+
+# ============================
+# Configuración
+# ============================
+# .env se conserva y se incluye en Git
+# .env.example también se incluye
+
+# ============================
+# Reportes y resultados
+# ============================
 reports/
 allure-results/
 allure-results-respaldo/
 allure-results-acumulado/
+allure-results-historico/
+allure-results-*/
 allure-report/
 test-results/
 *.log
+
+# ============================
+# ZIP de entregas y evidencias
+# ============================
+AZURIAN-QA-ALLURE-EVIDENCIAS.zip
+AZURIAN-QA-ENTREGA-FINAL.zip
+ENTREGA-OPENCODE-FASE2B.zip
+
+# ============================
+# Archivos auxiliares
+# ============================
+diagnostico-ui.ts
+temp-methods.txt

@@ -3,6 +3,7 @@ import type {
   APIResponse,
 } from "@playwright/test";
 import { config } from "../../config/env";
+import type { DocumentInput } from "../../types/documents";
 
 export class DocumentsClient {
   constructor(
@@ -29,7 +30,7 @@ export class DocumentsClient {
     });
   }
 
-  async create(document: Record<string, unknown>): Promise<APIResponse> {
+  async create(document: DocumentInput): Promise<APIResponse> {
     return this.api.post(`${config.apiBaseUrl}/documents`, {
       headers: this.headers,
       data: document,
@@ -43,10 +44,7 @@ export class DocumentsClient {
     );
   }
 
-  async update(
-    id: string,
-    document: Record<string, unknown>
-  ): Promise<APIResponse> {
+  async update(id: string, document: DocumentInput): Promise<APIResponse> {
     return this.api.put(
       `${config.apiBaseUrl}/documents/${encodeURIComponent(id)}`,
       {

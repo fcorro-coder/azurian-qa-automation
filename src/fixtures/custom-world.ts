@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   Browser,
   BrowserContext,
   Page,
@@ -11,6 +11,8 @@ import {
   setWorldConstructor,
   type IWorldOptions
 } from "@cucumber/cucumber";
+
+import type { DocumentFixture, DocumentInput } from "../types/documents";
 
 const SENSITIVE_KEYS = new Set([
   "token",
@@ -54,7 +56,18 @@ export class CustomWorld extends World {
   responseBody?: unknown;
   authToken?: string;
   runId?: string;
-  documentData?: Record<string, unknown>;
+  /**
+   * RUT del receptor propio de este escenario, generado en el hook `Before`.
+   * Todos los documentos que el escenario cree comparten este RUT; ningún otro
+   * escenario de la corrida lo reutiliza.
+   */
+  rutReceptor?: string;
+  /** Cuerpo que los pasos API envían a POST/PUT /api/documents. */
+  documentData?: DocumentInput;
+  /** Documento principal que un escenario UI crea y verifica. */
+  documentFixture?: DocumentFixture;
+  /** Segundo documento del mismo RUT: solo lo crea el escenario de consulta. */
+  secondaryDocumentFixture?: DocumentFixture;
   documentId?: string;
 
   constructor(options: IWorldOptions) {
@@ -81,9 +94,15 @@ export class CustomWorld extends World {
         response: body
       };
 
+      if (this.documentData && (method === "POST" || method === "PUT" || method === "PATCH")) {
+        await this.attach(
+          JSON.stringify(sanitize({ method, request: this.documentData }), null, 2),
+          { mediaType: "application/json", fileName: "Solicitud API.json" }
+        );
+      }
       await this.attach(
         JSON.stringify(evidence, null, 2),
-        "application/json"
+        { mediaType: "application/json", fileName: `Obtenido API ${method} ${response.status()}.json` }
       );
     } catch (error) {
       console.warn(

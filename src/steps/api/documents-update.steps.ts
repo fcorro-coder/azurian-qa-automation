@@ -1,8 +1,8 @@
 import { Given, When, Then } from "@cucumber/cucumber";
 import assert from "node:assert/strict";
-import { randomInt } from "node:crypto";
 import { DocumentsClient } from "../../api/clients/documents.client";
 import { assertDocument } from "../../validators/document-contract";
+import { ESTADO_PRUEBA_API, EXPECTED_API_SIN_ADJUNTOS, createDocumentInput, randomFolio } from "../../fixtures/test-data";
 import type { CustomWorld } from "../../fixtures/custom-world";
 
 function getClient(world: CustomWorld): DocumentsClient {
@@ -20,15 +20,8 @@ function getClient(world: CustomWorld): DocumentsClient {
 Given("existe un documento pendiente creado para la prueba", async function (this: CustomWorld) {
   const client = getClient(this);
 
-  this.documentData = {
-    tipoDte: "DTE 33",
-    folio: randomInt(100000, 9999999),
-    rutReceptor: "76.086.428-5",
-    monto: 150000,
-    fechaEmision: new Date().toISOString().slice(0, 10),
-    deliveryChannel: "PORTAL",
-    sendCopy: false,
-  };
+  assert.ok(this.rutReceptor, "No se generó el RUT del escenario");
+  this.documentData = createDocumentInput(randomFolio(), this.rutReceptor);
 
   const response = await client.create(this.documentData);
   const responseText = await response.text();
@@ -47,7 +40,7 @@ Given("existe un documento pendiente creado para la prueba", async function (thi
   );
 
   assert.ok(
-    "estado" in body && body.estado === "PENDIENTE",
+    "estado" in body && body.estado === ESTADO_PRUEBA_API,
     "El documento preparado debe estar PENDIENTE"
   );
 
@@ -81,7 +74,7 @@ Then("la actualización debe responder con código {int}", async function (this:
     `HTTP esperado: ${status}; obtenido: ${this.response.status()}; respuesta: ${responseText}`
   );
   if (status === 200 && this.documentData && this.documentId) {
-    assertDocument(JSON.parse(responseText) as unknown, { ...this.documentData, id: this.documentId, estado: "PENDIENTE", contactEmail: null, observaciones: null, attachmentName: null });
+    assertDocument(JSON.parse(responseText) as unknown, { ...this.documentData, id: this.documentId, ...EXPECTED_API_SIN_ADJUNTOS });
   }
 });
 
@@ -100,15 +93,15 @@ Then("el documento debe conservar el monto actualizado", async function (this: C
   );
 
   const body: unknown = JSON.parse(responseText);
-  assertDocument(body, { ...this.documentData, id: this.documentId, estado: "PENDIENTE", contactEmail: null, observaciones: null, attachmentName: null });
+  assertDocument(body, { ...this.documentData, id: this.documentId, ...EXPECTED_API_SIN_ADJUNTOS });
 
   assert.ok(
     typeof body === "object" && body !== null && "monto" in body,
     "La respuesta no contiene el monto"
   );
 
-  for (const key of ["tipoDte", "folio", "rutReceptor", "monto", "fechaEmision", "deliveryChannel", "sendCopy"]) {
-    assert.equal((body as Record<string, unknown>)[key], this.documentData[key], `El campo ${key} no se conservó tras PUT`);
+  for (const key of ["tipoDte", "folio", "rutReceptor", "monto", "fechaEmision", "deliveryChannel", "sendCopy"] as const) {
+    assert.equal(body[key], this.documentData[key], `El campo ${key} no se conservó tras PUT`);
   }
   await this.attachApiEvidence(response, "GET");
 });

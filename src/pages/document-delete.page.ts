@@ -1,7 +1,7 @@
-﻿import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 const DOCUMENTS_PREFIX = "/api/documents/";
-const NETWORK_TIMEOUT_MS = 15_000;
+import { UI_NETWORK_TIMEOUT_MS } from "../config/timeouts";
 
 /** Confirmación de eliminación con localizadores y esperas centralizados. */
 export class DocumentDeletePage {
@@ -21,7 +21,7 @@ export class DocumentDeletePage {
       (candidate) =>
         candidate.request().method() === "DELETE" &&
         new URL(candidate.url()).pathname.startsWith(DOCUMENTS_PREFIX),
-      { timeout: NETWORK_TIMEOUT_MS }
+      { timeout: UI_NETWORK_TIMEOUT_MS }
     );
     pendingDelete.catch(() => undefined);
 

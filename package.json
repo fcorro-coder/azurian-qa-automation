@@ -9,7 +9,13 @@
     "typecheck": "tsc --noEmit",
     "report:generate": "allure generate allure-results --clean -o allure-report",
     "report:open": "allure open allure-report",
-    "test:check": "npm run typecheck && npm test"
+    "test:check": "npm run typecheck && npm test",
+    "report:archive": "node scripts/allure-archive.cjs",
+    "report:clean": "node scripts/allure-clean.cjs",
+    "test:hybrid": "cucumber-js --config cucumber.cjs --tags @hibrido",
+    "report:verify": "node scripts/allure-verify.cjs",
+    "report:environment": "node scripts/allure-environment.cjs",
+    "test:official": "npm run typecheck && npm run report:archive && npm run report:clean && npm run report:environment && npm test && npm run report:verify && npm run report:generate"
   },
   "keywords": [],
   "author": "",

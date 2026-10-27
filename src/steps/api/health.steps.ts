@@ -1,4 +1,5 @@
-﻿import { Given, When, Then } from "@cucumber/cucumber";
+import { API_TIMEOUT_MS } from "../../config/timeouts";
+import { Given, When, Then } from "@cucumber/cucumber";
 import { request } from "@playwright/test";
 import assert from "node:assert/strict";
 import { config } from "../../config/env";
@@ -11,7 +12,7 @@ Given("que el laboratorio Azurian está configurado", function () {
 When("consulto el estado de salud de la API", async function (this: CustomWorld) {
   this.apiContext = await request.newContext({
     baseURL: config.apiBaseUrl,
-    timeout: 15000,
+    timeout: API_TIMEOUT_MS,
   });
   // Registrar el método HTTP para las evidencias de Allure
   this.responseMethod = "GET";
